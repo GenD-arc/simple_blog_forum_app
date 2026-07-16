@@ -1,0 +1,39 @@
+name: blog_forum_app
+description: A simple Blog/Forum app built with Flutter, Provider, go_router, and Supabase.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # State management
+  provider: ^6.1.2
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Backend
+  supabase_flutter: ^2.5.6
+
+  # Images
+  image_picker: ^1.1.2
+  cached_network_image: ^3.3.1
+
+  # UI / utils
+  google_fonts: ^6.2.1
+  intl: ^0.19.0
+  uuid: ^4.4.0
+  timeago: ^3.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
