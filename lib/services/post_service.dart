@@ -34,43 +34,43 @@ class PostService {
   }
 
   Future<PostModel> createPost({
-    required String title,
-    required String content,
-    String? imageUrl,
-  }) async {
-    final userId = _client.auth.currentUser!.id;
-    final data = await _client
-        .from('posts')
-        .insert({
-          'user_id': userId,
-          'title': title,
-          'content': content,
-          'image_url': imageUrl,
-        })
-        .select('*, profiles(username), comments(count)')
-        .single();
-    return PostModel.fromMap(data);
-  }
+  required String title,
+  required String content,
+  List<String> imageUrls = const [],
+}) async {
+  final userId = _client.auth.currentUser!.id;
+  final data = await _client
+      .from('posts')
+      .insert({
+        'user_id': userId,
+        'title': title,
+        'content': content,
+        'image_urls': imageUrls,
+      })
+      .select('*, profiles(username), comments(count)')
+      .single();
+  return PostModel.fromMap(data);
+}
 
-  Future<PostModel> updatePost({
-    required String id,
-    required String title,
-    required String content,
-    String? imageUrl,
-  }) async {
-    final data = await _client
-        .from('posts')
-        .update({
-          'title': title,
-          'content': content,
-          'image_url': imageUrl,
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', id)
-        .select('*, profiles(username), comments(count)')
-        .single();
-    return PostModel.fromMap(data);
-  }
+Future<PostModel> updatePost({
+  required String id,
+  required String title,
+  required String content,
+  List<String> imageUrls = const [],
+}) async {
+  final data = await _client
+      .from('posts')
+      .update({
+        'title': title,
+        'content': content,
+        'image_urls': imageUrls,
+        'updated_at': DateTime.now().toIso8601String(),
+      })
+      .eq('id', id)
+      .select('*, profiles(username), comments(count)')
+      .single();
+  return PostModel.fromMap(data);
+}
 
   Future<void> deletePost(String id) async {
     await _client.from('posts').delete().eq('id', id);

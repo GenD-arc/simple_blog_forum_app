@@ -3,7 +3,7 @@ class PostModel {
   final String userId;
   final String title;
   final String content;
-  final String? imageUrl;
+  final List<String> imageUrls;
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? authorUsername;
@@ -14,7 +14,7 @@ class PostModel {
     required this.userId,
     required this.title,
     required this.content,
-    this.imageUrl,
+    this.imageUrls = const [],
     required this.createdAt,
     required this.updatedAt,
     this.authorUsername,
@@ -22,7 +22,6 @@ class PostModel {
   });
 
   factory PostModel.fromMap(Map<String, dynamic> map) {
-    // profiles is joined as `profiles(username)`; comments count via `comments(count)`
     final profile = map['profiles'];
     final commentsAgg = map['comments'];
     int parsedCommentCount = 0;
@@ -30,12 +29,15 @@ class PostModel {
       parsedCommentCount = (commentsAgg.first['count'] as num?)?.toInt() ?? 0;
     }
 
+    final rawUrls = map['image_urls'];
+    final imageUrls = rawUrls is List ? rawUrls.whereType<String>().toList() : <String>[];
+
     return PostModel(
       id: map['id'] as String,
       userId: map['user_id'] as String,
       title: map['title'] as String? ?? '',
       content: map['content'] as String? ?? '',
-      imageUrl: map['image_url'] as String?,
+      imageUrls: imageUrls,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String? ?? map['created_at'] as String),
       authorUsername: profile is Map ? profile['username'] as String? : null,
@@ -46,15 +48,14 @@ class PostModel {
   PostModel copyWith({
     String? title,
     String? content,
-    String? imageUrl,
-    bool clearImage = false,
+    List<String>? imageUrls,
   }) {
     return PostModel(
       id: id,
       userId: userId,
       title: title ?? this.title,
       content: content ?? this.content,
-      imageUrl: clearImage ? null : (imageUrl ?? this.imageUrl),
+      imageUrls: imageUrls ?? this.imageUrls,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
       authorUsername: authorUsername,

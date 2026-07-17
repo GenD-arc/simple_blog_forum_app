@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../core/theme.dart';
 import '../models/comment_model.dart';
+import 'comment_image_strip.dart';
 
 class CommentCard extends StatelessWidget {
   const CommentCard({
@@ -73,24 +73,11 @@ class CommentCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(comment.content, style: Theme.of(context).textTheme.bodyLarge),
-          if (comment.imageUrl != null) ...[
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: CachedNetworkImage(
-                imageUrl: comment.imageUrl!,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: 160,
-                placeholder: (_, __) => Container(color: AppColors.border),
-                errorWidget: (_, __, ___) => Container(
-                  color: AppColors.border,
-                  height: 160,
-                  child: const Icon(Icons.broken_image_outlined),
-                ),
-              ),
-            ),
+          if (comment.content.isNotEmpty)
+              Text(comment.content, style: Theme.of(context).textTheme.bodyLarge),
+          if (comment.imageUrls.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              CommentImageStrip(imageUrls: comment.imageUrls),
           ],
         ],
       ),

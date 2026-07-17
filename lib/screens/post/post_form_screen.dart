@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -7,9 +5,10 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme.dart';
 import '../../models/post_model.dart';
+import '../../models/picked_image_model.dart';
 import '../../providers/post_provider.dart';
 import '../../services/post_service.dart';
-import '../../widgets/image_picker_field.dart';
+import '../../widgets/multi_image_picker_field.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/max_width_container.dart';
 
@@ -35,9 +34,7 @@ class _PostFormScreenState extends State<PostFormScreen> {
   final _postService = PostService();
 
   PostModel? _original;
-  XFile? _pickedImage;
-  Uint8List? _pickedImageBytes;
-  bool _removeImage = false;
+  List<PickedImage> _images = [];
 
   bool _loadingOriginal = false;
   bool _saving = false;
@@ -71,6 +68,8 @@ class _PostFormScreenState extends State<PostFormScreen> {
     _original = post;
     _titleController.text = post.title;
     _contentController.text = post.content;
+    // Updated to handle multiple image URLs
+    _images = post.imageUrls.map((u) => PickedImage.existing(u)).toList();
   }
 
   @override
@@ -80,10 +79,33 @@ class _PostFormScreenState extends State<PostFormScreen> {
     super.dispose();
   }
 
+  // New method to add an image
+  Future<void> _addImage() async {
+    if (_images.length >= 5) return;
+    final picker = ImagePicker();
+    final result = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+      maxWidth: 1600,
+    );
+    if (result == null) return;
+    final bytes = await result.readAsBytes();
+    setState(() => _images = [..._images, PickedImage.picked(result, bytes)]);
+  }
+
+  // New method to remove an image at a specific index
+  void _removeImageAt(int index) {
+    setState(() => _images = List.of(_images)..removeAt(index));
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final postProvider = context.read<PostProvider>();
+
+    // Extract kept URLs and new files
+    final keptUrls = _images.where((i) => i.isExisting).map((i) => i.existingUrl!).toList();
+    final newFiles = _images.where((i) => !i.isExisting).map((i) => i.file!).toList();
 
     try {
       if (widget.isEditing) {
@@ -91,22 +113,25 @@ class _PostFormScreenState extends State<PostFormScreen> {
           original: _original!,
           title: _titleController.text.trim(),
           content: _contentController.text.trim(),
-          newImageFile: _pickedImage,
-          removeImage: _removeImage,
+          keptImageUrls: keptUrls,
+          newImageFiles: newFiles,
         );
         if (mounted) context.pop(updated);
       } else {
         final created = await postProvider.createPost(
           title: _titleController.text.trim(),
           content: _contentController.text.trim(),
-          imageFile: _pickedImage,
+          imageFiles: newFiles,
         );
         if (mounted) context.pop(created);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Something went wrong. Please try again.', style: TextStyle(color: Colors.white),), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Something went wrong. Please try again.', style: TextStyle(color: Colors.white),),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -136,19 +161,11 @@ class _PostFormScreenState extends State<PostFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ImagePickerField(
-                              existingUrl: _removeImage ? null : _original?.imageUrl,
-                              pickedBytes: _pickedImageBytes,
-                              onPick: (file, bytes) => setState(() {
-                                _pickedImage = file;
-                                _pickedImageBytes = bytes;
-                                _removeImage = false;
-                              }),
-                              onRemove: () => setState(() {
-                                _pickedImage = null;
-                                _pickedImageBytes = null;
-                                _removeImage = true;
-                              }),
+                            // Replaced ImagePickerField with MultiImagePickerField
+                            MultiImagePickerField(
+                              images: _images,
+                              onAdd: _addImage,
+                              onRemoveAt: _removeImageAt,
                             ),
                             const SizedBox(height: 20),
                             TextFormField(

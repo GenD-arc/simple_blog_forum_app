@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../../core/theme.dart';
 import '../../models/comment_model.dart';
+import '../../models/picked_image_model.dart';
 import '../../models/post_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/comment_provider.dart';
@@ -17,6 +16,7 @@ import '../../services/post_service.dart';
 import '../../widgets/comment_card.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/max_width_container.dart';
+import '../../widgets/post_image_gallery.dart';
 
 class PostDetailScreen extends StatefulWidget {
   const PostDetailScreen({super.key, required this.postId});
@@ -34,10 +34,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   String? _postError;
 
   final _commentController = TextEditingController();
-  XFile? _newCommentImage;
-  Uint8List? _newCommentImageBytes;
+  List<PickedImage> _newCommentImages = [];
   CommentModel? _editingComment;
-  bool _removeExistingCommentImage = false;
+
+  static const int _maxCommentImages = 3;
 
   @override
   void initState() {
@@ -46,6 +46,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CommentProvider>().loadComments(widget.postId);
     });
+    // Rebuild the composer (send button enabled state) as the user types.
+    _commentController.addListener(() => setState(() {}));
   }
 
   @override
@@ -69,45 +71,51 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  Future<void> _pickCommentImage() async {
+  Future<void> _addCommentImage() async {
+    if (_newCommentImages.length >= _maxCommentImages) return;
     final picker = ImagePicker();
     final result =
         await picker.pickImage(source: ImageSource.gallery, imageQuality: 80, maxWidth: 1400);
-    if (result != null) {
-      final bytes = await result.readAsBytes();
-      setState(() {
-        _newCommentImage = result;
-        _newCommentImageBytes = bytes;
-      });
-    }
+    if (result == null) return;
+    final bytes = await result.readAsBytes();
+    setState(() => _newCommentImages = [..._newCommentImages, PickedImage.picked(result, bytes)]);
+  }
+
+  void _removeCommentImageAt(int index) {
+    setState(() => _newCommentImages = List.of(_newCommentImages)..removeAt(index));
   }
 
   Future<void> _submitComment() async {
     final text = _commentController.text.trim();
-    if (text.isEmpty) return;
+    final hasImages = _newCommentImages.isNotEmpty;
+    if (text.isEmpty && !hasImages) return;
+
     final commentProvider = context.read<CommentProvider>();
+
+    final keptUrls =
+        _newCommentImages.where((i) => i.isExisting).map((i) => i.existingUrl!).toList();
+    final newFiles =
+        _newCommentImages.where((i) => !i.isExisting).map((i) => i.file!).toList();
 
     if (_editingComment != null) {
       await commentProvider.updateComment(
         original: _editingComment!,
         content: text,
-        newImageFile: _newCommentImage,
-        removeImage: _removeExistingCommentImage,
+        keptImageUrls: keptUrls,
+        newImageFiles: newFiles,
       );
     } else {
       await commentProvider.addComment(
         postId: widget.postId,
         content: text,
-        imageFile: _newCommentImage,
+        imageFiles: newFiles,
       );
     }
 
     setState(() {
       _commentController.clear();
-      _newCommentImage = null;
-      _newCommentImageBytes = null;
+      _newCommentImages = [];
       _editingComment = null;
-      _removeExistingCommentImage = false;
     });
     if (_post != null) {
       final refreshed = await _postService.fetchPostById(widget.postId);
@@ -119,9 +127,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     setState(() {
       _editingComment = comment;
       _commentController.text = comment.content;
-      _newCommentImage = null;
-      _newCommentImageBytes = null;
-      _removeExistingCommentImage = false;
+      _newCommentImages = comment.imageUrls.map((u) => PickedImage.existing(u)).toList();
     });
   }
 
@@ -129,9 +135,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     setState(() {
       _editingComment = null;
       _commentController.clear();
-      _newCommentImage = null;
-      _newCommentImageBytes = null;
-      _removeExistingCommentImage = false;
+      _newCommentImages = [];
     });
   }
 
@@ -190,9 +194,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         actions: [
           if (isPostOwner)
             PopupMenuButton<String>(
-              onSelected: (value) {
+              onSelected: (value) async {
                 if (value == 'edit') {
-                  context.push('/post/${_post!.id}/edit', extra: _post);
+                  final updated = await context.push<PostModel>(
+                    '/post/${_post!.id}/edit',
+                    extra: _post,
+                  );
+                  if (updated != null && mounted) {
+                    setState(() => _post = updated);
+                  }
                 }
                 if (value == 'delete') _deletePost();
               },
@@ -217,7 +227,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             children: [
                               _buildPostHeader(_post!),
                               const SizedBox(height: 22),
-                              Divider(color: AppColors.border),
+                              const Divider(color: AppColors.border),
                               const SizedBox(height: 14),
                               Text('Comments (${commentProvider.comments.length})',
                                   style: Theme.of(context).textTheme.titleMedium),
@@ -257,23 +267,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (post.imageUrl != null)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: CachedNetworkImage(
-                imageUrl: post.imageUrl!,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(color: AppColors.border),
-                errorWidget: (_, __, ___) => Container(
-                  color: AppColors.border,
-                  child: const Icon(Icons.broken_image_outlined),
-                ),
-              ),
-            ),
-          ),
-        const SizedBox(height: 18),
+        if (post.imageUrls.isNotEmpty) ...[
+          PostImageGallery(imageUrls: post.imageUrls),
+          const SizedBox(height: 18),
+        ] else
+          const SizedBox(height: 4),
         Text(post.title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
         Row(
@@ -327,7 +325,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (!auth.isLoggedIn) {
       return Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: AppColors.surface,
           border: Border(top: BorderSide(color: AppColors.border)),
         ),
@@ -346,9 +344,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       );
     }
 
+    final canSubmit = !commentProvider.isSubmitting &&
+        (_commentController.text.trim().isNotEmpty || _newCommentImages.isNotEmpty);
+
     return Container(
       padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
@@ -367,37 +368,61 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 ],
               ),
             ),
-          if (_newCommentImageBytes != null)
+          if (_newCommentImages.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: _imageThumbWithRemove(
-                child: Image.memory(_newCommentImageBytes!,
-                    height: 90, width: 90, fit: BoxFit.cover),
-                onRemove: () => setState(() {
-                  _newCommentImage = null;
-                  _newCommentImageBytes = null;
-                }),
-              ),
-            )
-          else if (_editingComment?.imageUrl != null && !_removeExistingCommentImage)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _imageThumbWithRemove(
-                child: CachedNetworkImage(
-                  imageUrl: _editingComment!.imageUrl!,
-                  height: 90,
-                  width: 90,
-                  fit: BoxFit.cover,
+              child: SizedBox(
+                height: 72,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _newCommentImages.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final img = _newCommentImages[index];
+                    return _imageThumbWithRemove(
+                      child: img.isExisting
+                          ? CachedNetworkImage(
+                              imageUrl: img.existingUrl!,
+                              width: 72,
+                              height: 72,
+                              fit: BoxFit.cover,
+                            )
+                          : Image.memory(img.bytes!, width: 72, height: 72, fit: BoxFit.cover),
+                      onRemove: () => _removeCommentImageAt(index),
+                    );
+                  },
                 ),
-                onRemove: () => setState(() => _removeExistingCommentImage = true),
               ),
             ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              IconButton(
-                onPressed: _pickCommentImage,
-                icon: const Icon(Icons.image_outlined, color: AppColors.crimson),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    onPressed:
+                        _newCommentImages.length >= _maxCommentImages ? null : _addCommentImage,
+                    icon: const Icon(Icons.image_outlined, color: AppColors.crimson),
+                  ),
+                  if (_newCommentImages.isNotEmpty)
+                    Positioned(
+                      right: 2,
+                      top: 2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.crimson,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${_newCommentImages.length}/$_maxCommentImages',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                ],
               ),
               Expanded(
                 child: TextField(
@@ -412,10 +437,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                onPressed: commentProvider.isSubmitting ? null : _submitComment,
+                onPressed: canSubmit ? _submitComment : null,
                 style: IconButton.styleFrom(
                   backgroundColor: AppColors.crimson,
                   foregroundColor: Colors.white,
+                  disabledBackgroundColor: AppColors.border,
                 ),
                 icon: commentProvider.isSubmitting
                     ? const SizedBox(

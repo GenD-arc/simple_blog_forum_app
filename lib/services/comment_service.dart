@@ -20,7 +20,7 @@ class CommentService {
   Future<CommentModel> addComment({
     required String postId,
     required String content,
-    String? imageUrl,
+    List<String> imageUrls = const [],
   }) async {
     final userId = _client.auth.currentUser!.id;
     final data = await _client
@@ -29,7 +29,7 @@ class CommentService {
           'post_id': postId,
           'user_id': userId,
           'content': content,
-          'image_url': imageUrl,
+          'image_urls': imageUrls,
         })
         .select('*, profiles(username)')
         .single();
@@ -39,13 +39,13 @@ class CommentService {
   Future<CommentModel> updateComment({
     required String id,
     required String content,
-    String? imageUrl,
+    List<String> imageUrls = const [],
   }) async {
     final data = await _client
         .from('comments')
         .update({
           'content': content,
-          'image_url': imageUrl,
+          'image_urls': imageUrls,
           'updated_at': DateTime.now().toIso8601String(),
         })
         .eq('id', id)

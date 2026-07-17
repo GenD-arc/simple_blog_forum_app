@@ -35,22 +35,22 @@ class CommentProvider extends ChangeNotifier {
   Future<void> addComment({
     required String postId,
     required String content,
-    XFile? imageFile,
+    List<XFile> imageFiles = const [],
   }) async {
     isSubmitting = true;
     notifyListeners();
     try {
-      String? imageUrl;
-      if (imageFile != null) {
-        imageUrl = await _storageService.uploadImage(
-          file: imageFile,
+      List<String> imageUrls = [];
+      if (imageFiles.isNotEmpty) {
+        imageUrls = await _storageService.uploadImages(
+          files: imageFiles,
           bucket: SupabaseConfig.commentImagesBucket,
         );
       }
       final comment = await _commentService.addComment(
         postId: postId,
         content: content,
-        imageUrl: imageUrl,
+        imageUrls: imageUrls,
       );
       comments.add(comment);
     } finally {
@@ -59,40 +59,40 @@ class CommentProvider extends ChangeNotifier {
     }
   }
 
+  /// [keptImageUrls]: existing images the user did NOT remove.
+  /// [newImageFiles]: freshly picked local files to upload.
   Future<void> updateComment({
     required CommentModel original,
     required String content,
-    XFile? newImageFile,
-    bool removeImage = false,
+    List<String> keptImageUrls = const [],
+    List<XFile> newImageFiles = const [],
   }) async {
     isSubmitting = true;
     notifyListeners();
     try {
-      String? imageUrl = original.imageUrl;
-
-      if (newImageFile != null) {
-        if (original.imageUrl != null) {
-          await _storageService.deleteImage(
-            imageUrl: original.imageUrl!,
-            bucket: SupabaseConfig.commentImagesBucket,
-          );
-        }
-        imageUrl = await _storageService.uploadImage(
-          file: newImageFile,
+      final removedUrls =
+          original.imageUrls.where((url) => !keptImageUrls.contains(url)).toList();
+      if (removedUrls.isNotEmpty) {
+        await _storageService.deleteImages(
+          imageUrls: removedUrls,
           bucket: SupabaseConfig.commentImagesBucket,
         );
-      } else if (removeImage && original.imageUrl != null) {
-        await _storageService.deleteImage(
-          imageUrl: original.imageUrl!,
-          bucket: SupabaseConfig.commentImagesBucket,
-        );
-        imageUrl = null;
       }
+
+      List<String> newUrls = [];
+      if (newImageFiles.isNotEmpty) {
+        newUrls = await _storageService.uploadImages(
+          files: newImageFiles,
+          bucket: SupabaseConfig.commentImagesBucket,
+        );
+      }
+
+      final finalUrls = [...keptImageUrls, ...newUrls];
 
       final updated = await _commentService.updateComment(
         id: original.id,
         content: content,
-        imageUrl: imageUrl,
+        imageUrls: finalUrls,
       );
       final idx = comments.indexWhere((c) => c.id == updated.id);
       if (idx != -1) comments[idx] = updated;
@@ -103,9 +103,9 @@ class CommentProvider extends ChangeNotifier {
   }
 
   Future<void> deleteComment(CommentModel comment) async {
-    if (comment.imageUrl != null) {
-      await _storageService.deleteImage(
-        imageUrl: comment.imageUrl!,
+    if (comment.imageUrls.isNotEmpty) {
+      await _storageService.deleteImages(
+        imageUrls: comment.imageUrls,
         bucket: SupabaseConfig.commentImagesBucket,
       );
     }

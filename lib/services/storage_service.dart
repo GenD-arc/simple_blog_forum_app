@@ -34,6 +34,25 @@ class StorageService {
     return _client.storage.from(bucket).getPublicUrl(path);
   }
 
+  Future<List<String>> uploadImages({
+  required List<XFile> files,
+  required String bucket,
+}) {
+  return Future.wait(files.map((f) => uploadImage(file: f, bucket: bucket)));
+}
+
+Future<void> deleteImages({
+  required List<String> imageUrls,
+  required String bucket,
+}) async {
+  final paths = imageUrls
+      .map((url) => _extractPathFromUrl(url, bucket))
+      .whereType<String>()
+      .toList();
+  if (paths.isEmpty) return;
+  await _client.storage.from(bucket).remove(paths);
+}
+
   /// Deletes an image from [bucket] given its full public URL.
   Future<void> deleteImage({
     required String imageUrl,

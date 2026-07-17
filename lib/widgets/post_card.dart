@@ -20,19 +20,45 @@ class PostCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (post.imageUrl != null)
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: CachedNetworkImage(
-                  imageUrl: post.imageUrl!,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(color: AppColors.border),
-                  errorWidget: (_, __, ___) => Container(
-                    color: AppColors.border,
-                    child: const Icon(Icons.broken_image_outlined),
+            if (post.imageUrls.isNotEmpty)
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CachedNetworkImage(
+                        imageUrl: post.imageUrls.first,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(color: AppColors.border),
+                        errorWidget: (_, __, ___) => Container(
+                          color: AppColors.border,
+                          child: const Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
+                      if (post.imageUrls.length > 1)
+                        Positioned(
+                          right: 10,
+                          bottom: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.photo_library_outlined, size: 13, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text('${post.imageUrls.length}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
               child: Column(
@@ -71,7 +97,7 @@ class PostCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Icon(Icons.mode_comment_outlined,
+                      const Icon(Icons.mode_comment_outlined,
                           size: 15, color: AppColors.textSecondary),
                       const SizedBox(width: 4),
                       Text('${post.commentCount}',

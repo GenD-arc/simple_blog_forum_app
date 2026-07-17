@@ -57,60 +57,58 @@ class PostProvider extends ChangeNotifier {
   Future<PostModel> createPost({
     required String title,
     required String content,
-    XFile? imageFile,
+    List<XFile> imageFiles = const [],
   }) async {
-    String? imageUrl;
-    if (imageFile != null) {
-      imageUrl = await _storageService.uploadImage(
-        file: imageFile,
+    List<String> imageUrls = [];
+    if (imageFiles.isNotEmpty) {
+      imageUrls = await _storageService.uploadImages(
+        files: imageFiles,
         bucket: SupabaseConfig.postImagesBucket,
       );
     }
     final post = await _postService.createPost(
       title: title,
       content: content,
-      imageUrl: imageUrl,
+      imageUrls: imageUrls,
     );
     posts.insert(0, post);
     notifyListeners();
     return post;
   }
 
-  /// Updates a post. [removeImage] deletes the existing image with no
-  /// replacement; [newImageFile] uploads a replacement (old one is removed).
+  /// [keptImageUrls]: existing images the user did NOT remove.
+  /// [newImageFiles]: freshly picked local files to upload.
   Future<PostModel> updatePost({
     required PostModel original,
     required String title,
     required String content,
-    XFile? newImageFile,
-    bool removeImage = false,
+    List<String> keptImageUrls = const [],
+    List<XFile> newImageFiles = const [],
   }) async {
-    String? imageUrl = original.imageUrl;
-
-    if (newImageFile != null) {
-      if (original.imageUrl != null) {
-        await _storageService.deleteImage(
-          imageUrl: original.imageUrl!,
-          bucket: SupabaseConfig.postImagesBucket,
-        );
-      }
-      imageUrl = await _storageService.uploadImage(
-        file: newImageFile,
+    final removedUrls =
+        original.imageUrls.where((url) => !keptImageUrls.contains(url)).toList();
+    if (removedUrls.isNotEmpty) {
+      await _storageService.deleteImages(
+        imageUrls: removedUrls,
         bucket: SupabaseConfig.postImagesBucket,
       );
-    } else if (removeImage && original.imageUrl != null) {
-      await _storageService.deleteImage(
-        imageUrl: original.imageUrl!,
-        bucket: SupabaseConfig.postImagesBucket,
-      );
-      imageUrl = null;
     }
+
+    List<String> newUrls = [];
+    if (newImageFiles.isNotEmpty) {
+      newUrls = await _storageService.uploadImages(
+        files: newImageFiles,
+        bucket: SupabaseConfig.postImagesBucket,
+      );
+    }
+
+    final finalUrls = [...keptImageUrls, ...newUrls];
 
     final updated = await _postService.updatePost(
       id: original.id,
       title: title,
       content: content,
-      imageUrl: imageUrl,
+      imageUrls: finalUrls,
     );
 
     final idx = posts.indexWhere((p) => p.id == updated.id);
@@ -120,9 +118,9 @@ class PostProvider extends ChangeNotifier {
   }
 
   Future<void> deletePost(PostModel post) async {
-    if (post.imageUrl != null) {
-      await _storageService.deleteImage(
-        imageUrl: post.imageUrl!,
+    if (post.imageUrls.isNotEmpty) {
+      await _storageService.deleteImages(
+        imageUrls: post.imageUrls,
         bucket: SupabaseConfig.postImagesBucket,
       );
     }

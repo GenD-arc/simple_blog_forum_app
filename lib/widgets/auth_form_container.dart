@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
 
-/// A centered, fixed-max-width card that both auth screens render their
-/// form inside, so Login and Register look like the same component at two
-/// different states rather than two independently-sized pages.
 class AuthFormContainer extends StatelessWidget {
   const AuthFormContainer({super.key, required this.child, this.maxWidth = 420});
 
